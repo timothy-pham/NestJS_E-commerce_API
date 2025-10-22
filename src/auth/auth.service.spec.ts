@@ -2,6 +2,7 @@ import { Test, TestingModule } from '@nestjs/testing';
 import { AuthService } from './auth.service';
 import { UsersService } from '../users/users.service';
 import { JwtService } from '@nestjs/jwt';
+import { UserRolesService } from '../user-roles/user-roles.service';
 
 describe('AuthService', () => {
   let service: AuthService;
@@ -15,6 +16,10 @@ describe('AuthService', () => {
     sign: jest.fn(),
   };
 
+  const mockUserRolesService = {
+    findByUser: jest.fn().mockResolvedValue([]),
+  };
+
   beforeEach(async () => {
     const module: TestingModule = await Test.createTestingModule({
       providers: [
@@ -26,6 +31,10 @@ describe('AuthService', () => {
         {
           provide: JwtService,
           useValue: mockJwtService,
+        },
+        {
+          provide: UserRolesService,
+          useValue: mockUserRolesService,
         },
       ],
     }).compile();
