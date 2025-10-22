@@ -16,7 +16,8 @@
     "test:cov": "jest --coverage",
     "test:debug": "node --inspect-brk -r tsconfig-paths/register -r ts-node/register node_modules/.bin/jest --runInBand",
     "test:e2e": "jest --config ./test/jest-e2e.json",
-    "seed:rbac": "ts-node -r tsconfig-paths/register scripts/seed-rbac.ts"
+    "seed:rbac": "ts-node -r tsconfig-paths/register scripts/seed-rbac.ts",
+    "seed:users": "ts-node -r tsconfig-paths/register scripts/seed-users.ts"
   },
   "keywords": [
     "nestjs",

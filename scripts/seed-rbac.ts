@@ -164,6 +164,29 @@ async function bootstrap() {
       }
     }
 
+    // Customer - Basic customer permissions (read products, create orders)
+    const customerResources = ['products', 'orders'];
+    const customerPermissions = storePermissions.filter((p: any) => 
+      (p.resource === 'products' && p.action === PermissionAction.READ) ||
+      (p.resource === 'orders' && [PermissionAction.CREATE, PermissionAction.READ].includes(p.action))
+    );
+    
+    try {
+      const customer = await rolesService.create({
+        name: 'customer',
+        description: 'Customer who can browse products and create orders',
+        scope: PermissionScope.SYSTEM,
+        permissions: customerPermissions.map((p: any) => p._id.toString()),
+        isSystemRole: true,
+        isActive: true,
+      });
+      console.log(`  ✓ Created role: ${customer.name}`);
+    } catch (error) {
+      if (error.status === 409) {
+        console.log(`  - Role already exists: customer`);
+      }
+    }
+
     console.log('\n✅ RBAC seeding completed successfully!');
     console.log('\nDefault roles created:');
     console.log('  - super_admin: Full system access');
@@ -171,6 +194,7 @@ async function bootstrap() {
     console.log('  - store_owner: Full store management');
     console.log('  - store_manager: Manage products and orders');
     console.log('  - staff: Basic order and product access');
+    console.log('  - customer: Browse products and create orders');
     
   } catch (error) {
     console.error('❌ Error seeding RBAC data:', error);
