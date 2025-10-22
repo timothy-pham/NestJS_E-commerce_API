@@ -107,8 +107,8 @@ If you discover a security vulnerability, please email the maintainer directly. 
 
 ## Security Checklist for Deployment
 
-- [ ] Changed JWT_SECRET to a strong random value
-- [ ] Configured MongoDB authentication
+- [v] Changed JWT_SECRET to a strong random value
+- [v] Configured MongoDB authentication
 - [ ] Enabled HTTPS
 - [ ] Set NODE_ENV=production
 - [ ] Reviewed all environment variables
