@@ -11,6 +11,7 @@ import { StoresModule } from './stores/stores.module';
 import { PermissionsModule } from './permissions/permissions.module';
 import { RolesModule } from './roles/roles.module';
 import { UserRolesModule } from './user-roles/user-roles.module';
+import { CommonModule } from './common/common.module';
 import { StoreContextMiddleware } from './common/middleware/store-context.middleware';
 
 @Module({
@@ -26,6 +27,7 @@ import { StoreContextMiddleware } from './common/middleware/store-context.middle
       }),
       inject: [ConfigService],
     }),
+    CommonModule,
     AuthModule,
     UsersModule,
     ProductsModule,

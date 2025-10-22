@@ -5,9 +5,13 @@ A comprehensive REST API for e-commerce backend built with NestJS, MongoDB, and 
 ## Features
 
 - 🔐 **JWT Authentication** - Secure user authentication with JWT tokens
+- 👻 **Guest User Support** - Temporary tokens for browsing without registration
+- 🔄 **Refresh Tokens** - Long-lived tokens for seamless re-authentication
 - 🛡️ **RBAC System** - Role-Based Access Control with multi-store support
 - 🏢 **Multi-Tenant Architecture** - Organization → Store → User hierarchy
 - 👥 **User Management** - Complete user CRUD operations with role-based access
+  - **Customer Type** - Regular customers with shopping capabilities
+  - **Staff Type** - Store/organization employees with role-based permissions
 - 📦 **Product Management** - Full product catalog with category organization
 - 🛒 **Order Management** - Order creation with stock management
 - 🏷️ **Category Management** - Product categorization system
@@ -69,9 +73,20 @@ npm run seed:rbac
 ```
 
 This will create:
-- Default roles: `super_admin`, `organization_admin`, `store_owner`, `store_manager`, `staff`
-- Permissions for all resources across different scopes
+- Default roles: `super_admin`, `organization_admin`, `store_owner`, `store_manager`, `staff`, `customer`
+- Permissions for all resources across different scopes (system, organization, store)
 - Role-permission associations
+
+6. (Optional) Seed sample users and test data:
+```bash
+npm run seed:users
+```
+
+This will create:
+- Sample organization (ACME Corporation)
+- Sample stores (Downtown Store, Mall Store)
+- Sample users with different roles (admin, manager, owner, staff, customers)
+- See console output for login credentials
 
 ## Running the Application
 
@@ -97,8 +112,10 @@ Once the application is running, visit:
 ## API Endpoints
 
 ### Authentication
-- `POST /auth/register` - Register a new user
-- `POST /auth/login` - Login user (returns JWT with roles)
+- `POST /auth/register` - Register a new customer account (automatically assigns customer role)
+- `POST /auth/login` - Login user (returns JWT access token and refresh token)
+- `POST /auth/refresh` - Refresh access token using refresh token
+- `POST /auth/guest` - Generate guest token for browsing without registration
 
 ### Organizations (RBAC)
 - `POST /organizations` - Create organization (super_admin only)
@@ -140,11 +157,13 @@ Once the application is running, visit:
 - `PATCH /user-roles/:id` - Update user role
 
 ### Users
-- `POST /users` - Create a new user
-- `GET /users` - Get all users (requires authentication)
-- `GET /users/:id` - Get user by ID (requires authentication)
-- `PATCH /users/:id` - Update user (requires authentication)
-- `DELETE /users/:id` - Delete user (requires authentication)
+- `POST /users` - Create a new user (requires super_admin or organization_admin role)
+- `GET /users` - Get all users (requires admin or manager role)
+- `GET /users/me` - Get current user profile (requires authentication)
+- `GET /users/:id` - Get user by ID (requires admin or manager role)
+- `PATCH /users/me` - Update current user profile (requires authentication)
+- `PATCH /users/:id` - Update user (requires super_admin, organization_admin, or store_owner role)
+- `DELETE /users/:id` - Delete user (requires super_admin or organization_admin role)
 
 ### Categories
 - `POST /categories` - Create category (requires authentication)
@@ -171,14 +190,42 @@ Once the application is running, visit:
 
 ## RBAC System
 
-This API implements a comprehensive Role-Based Access Control system:
+This API implements a comprehensive Role-Based Access Control system with support for guest users, customers, and staff members across multiple stores.
+
+### User Types
+
+#### Guest Users
+- Temporary access without registration
+- Can browse products and add to cart (session-based)
+- Short-lived token (1 hour expiration)
+- No database record required
+
+#### Customers
+- Registered users with customer accounts
+- Can create orders, view order history, update profile
+- Automatically assigned "customer" role on registration
+- Long-lived sessions with refresh tokens
+
+#### Staff Members
+- Store or organization employees
+- Assigned specific roles (owner, manager, staff)
+- Can be associated with specific stores or organizations
+- Role-based permissions for management operations
 
 ### Default Roles
-- **super_admin**: Full system access
-- **organization_admin**: Manages organization and all stores
-- **store_owner**: Full store management
-- **store_manager**: Manages products and orders
-- **staff**: Basic order and product access
+
+- **super_admin**: Full system access across all organizations and stores
+- **organization_admin**: Manages organization and all its stores
+- **store_owner**: Full management of a specific store
+- **store_manager**: Manages products and orders in a store
+- **staff**: Basic order and product access in a store
+- **customer**: Browse products, create orders, manage own profile
+
+### Permission Scopes
+
+- **System**: Global permissions across entire platform
+- **Organization**: Permissions within a specific organization
+- **Store**: Permissions within a specific store
 
 ### Store Context
 Include the `x-store-id` header in requests to set the store context:
@@ -256,12 +303,125 @@ src/
 │   ├── orders.service.ts
 │   └── orders.module.ts
 ├── common/               # Shared resources
-│   ├── decorators/       # Custom decorators (@Roles, @Permissions, @GetUser, @GetStoreId)
-│   ├── guards/           # Custom guards (RolesGuard, PermissionsGuard)
-│   ├── middleware/       # Middleware (StoreContextMiddleware)
-│   └── pipes/           # Custom pipes
+│   ├── decorators/       # Custom decorators
+│   │   ├── current-role.decorator.ts    # @CurrentRole() - Get user's roles
+│   │   ├── current-store.decorator.ts   # @CurrentStore() - Get store context
+│   │   ├── get-user.decorator.ts        # @GetUser() - Get authenticated user
+│   │   ├── get-store-id.decorator.ts    # @GetStoreId() - Get store ID from header
+│   │   ├── permissions.decorator.ts     # @Permissions() - Check permissions
+│   │   └── roles.decorator.ts           # @Roles() - Check roles
+│   ├── guards/           # Custom guards
+│   │   ├── roles.guard.ts               # RolesGuard - Role-based access
+│   │   └── permissions.guard.ts         # PermissionsGuard - Permission-based access
+│   ├── middleware/       # Middleware
+│   │   └── store-context.middleware.ts  # Extract x-store-id header
+│   └── common.module.ts  # Common module (global)
 ├── app.module.ts        # Root module
 └── main.ts              # Application entry point
+```
+
+## Guards & Decorators
+
+### Guards
+
+#### JwtAuthGuard
+Validates JWT token and attaches user info to request.
+
+```typescript
+@UseGuards(JwtAuthGuard)
+@Get('profile')
+async getProfile(@GetUser() user: any) {
+  return user;
+}
+```
+
+#### OptionalAuthGuard
+Allows both authenticated and guest access. Attaches user info if token provided.
+
+```typescript
+@UseGuards(OptionalAuthGuard)
+@Get('products')
+async getProducts(@GetUser() user?: any) {
+  // Works with or without authentication
+}
+```
+
+#### RolesGuard
+Checks if user has required roles. Works with `@Roles()` decorator.
+
+```typescript
+@UseGuards(JwtAuthGuard, RolesGuard)
+@Roles('super_admin', 'organization_admin')
+@Post('sensitive-data')
+async createSensitiveData() {
+  // Only super_admin or organization_admin can access
+}
+```
+
+#### PermissionsGuard
+Checks if user has required permissions. Works with `@Permissions()` decorator.
+
+```typescript
+@UseGuards(JwtAuthGuard, PermissionsGuard)
+@Permissions('orders:create', 'orders:update')
+@Post('orders')
+async createOrder() {
+  // User must have orders:create or orders:update permission
+}
+```
+
+### Decorators
+
+#### @GetUser()
+Extracts authenticated user from request.
+
+```typescript
+@Get('me')
+async getCurrentUser(@GetUser() user: any) {
+  // user = { userId, email, userType, roles, isGuest }
+}
+```
+
+#### @CurrentRole()
+Extracts user's roles from JWT payload.
+
+```typescript
+@Get('dashboard')
+async getDashboard(@CurrentRole() roles: string[]) {
+  // roles = ['store_manager', 'staff']
+}
+```
+
+#### @CurrentStore()
+Extracts store ID from x-store-id header.
+
+```typescript
+@Get('orders')
+async getOrders(@CurrentStore() storeId?: string) {
+  // storeId from x-store-id header
+}
+```
+
+#### @Roles()
+Specifies required roles for endpoint access.
+
+```typescript
+@Roles('store_owner', 'store_manager')
+@Get('reports')
+async getReports() {
+  // Requires store_owner or store_manager role
+}
+```
+
+#### @Permissions()
+Specifies required permissions for endpoint access.
+
+```typescript
+@Permissions('products:create', 'products:update')
+@Post('products')
+async createProduct() {
+  // Requires products:create or products:update permission
+}
 ```
 
 ## Testing
